@@ -9,7 +9,7 @@ import {
   Shield, Lock, PieChart, Filter, RefreshCw, Layers2,
   Network, Copy, CheckCircle2, AlertCircle, History,
   User, Mail, Link as LinkIcon, LogOut, CreditCard,
-  ChevronDown, Key, Sun, Moon
+  ChevronDown, Key, Sun, Moon, FileText, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, useConnect, useDisconnect, useBalance, useWriteContract, useWaitForTransactionReceipt, useReadContract, useBlockNumber, useGasPrice, useWatchContractEvent } from 'wagmi';
@@ -1631,59 +1631,86 @@ const App = () => {
                     {activeTab === 'Leaderboard' && <LeaderboardView />}
                     {activeTab === 'Quests' && <QuestsView onOpenDeposit={() => setDepositOpen(true)} />}
                     {activeTab === 'Flow' && <FlowView onOpenDeposit={() => setDepositOpen(true)} />}
+                    {activeTab === 'Strategy Flows' && <FlowView onOpenDeposit={() => setDepositOpen(true)} />}
                     {activeTab === 'Market Map' && <MarketMapView stats={protocolStats} />}
                     {activeTab === 'Profile' && <ProfileView />}
 
-                    {/* Platform Hub Sub-System Views */}
-                    {activeTab === 'Yield Engine v4' && <SystemModuleView title="YIELD ENGINE" subtitle="Core Processing v4.2" icon={Cpu} status="LIVE" items={[
-                      { label: 'Harvesting Rate', value: '0.4s/Block', icon: Zap, id: 'RT_01' },
-                      { label: 'Swap Efficiency', value: '99.98%', icon: Repeat, id: 'RT_02' },
-                      { label: 'Capital Slack', value: '0.04%', icon: Layers, id: 'RT_03' },
-                      { label: 'Auto-Compound', value: 'ENABLED', icon: TrendingUp, id: 'RT_04' }
+                    {/* CORE ENGINE Sub-System Views */}
+                    {activeTab === 'YO protocol' && <SystemModuleView title="YO PROTOCOL" subtitle="Underlying Infrastructure" icon={Cpu} status="LIVE" items={[
+                      { label: 'Core Version', value: 'v0.0.3-alpha', icon: Zap, id: 'YP_01' },
+                      { label: 'Total Value Linked', value: '$135.2M', icon: Database, id: 'YP_02' },
+                      { label: 'Ecosystem APR', value: '14.2% Avg', icon: TrendingUp, id: 'YP_03' },
+                      { label: 'Status', value: 'Synchronized', icon: Activity, id: 'YP_04' }
                     ]} />}
-                    {activeTab === 'Alpha Registry' && <SystemModuleView title="ALPHA REGISTRY" subtitle="Vault Indexing Node" icon={Database} status="SYNCED" items={[
-                      { label: 'Total Vaults', value: '42 Active', icon: BarChart4, id: 'REG_01' },
-                      { label: 'Metadata Sync', value: '14ms Latency', icon: Activity, id: 'REG_02' },
-                      { label: 'Auth Methods', value: 'EVM_MULTI', icon: Key, id: 'REG_03' },
-                      { label: 'Registry Version', value: 'v4.2.1-Gold', icon: Settings, id: 'REG_04' }
+                    {activeTab === 'Smart Savings' && <SystemModuleView title="SMART SAVINGS" subtitle="Yield Optimization Logic" icon={PieChart} status="OPTIMIZED" items={[
+                      { label: 'Routing Engine', value: 'Active', icon: Repeat, id: 'SS_01' },
+                      { label: 'Slippage', value: '< 0.01%', icon: Shield, id: 'SS_02' },
+                      { label: 'Auto-Compound', value: 'Enabled', icon: TrendingUp, id: 'SS_03' },
+                      { label: 'Capital Efficiency', value: '99.8%', icon: BarChart4, id: 'SS_04' }
                     ]} />}
-                    {activeTab === 'Risk Telemetry' && <SystemModuleView title="RISK TELEMETRY" subtitle="Hedge Protection Node" icon={ShieldAlert} status="NOMINAL" items={[
-                      { label: 'Liq Probability', value: '0.00%', icon: Shield, id: 'RSK_01' },
-                      { label: 'Vault Health', value: '98/100', icon: Activity, id: 'RSK_02' },
-                      { label: 'Price Feeds', value: '8 Redundant', icon: Globe, id: 'RSK_03' },
-                      { label: 'Safety Lock', value: 'ARMED', icon: Lock, id: 'RSK_04' }
+                    {activeTab === 'Safe Vaults' && <SystemModuleView title="SAFE VAULTS" subtitle="Non-Custodial Architecture" icon={Lock} status="SECURED" items={[
+                      { label: 'Live Vaults', value: '42 Mainnet', icon: Database, id: 'SV_01' },
+                      { label: 'Risk Rating', value: 'A+ Tier', icon: ShieldCheck, id: 'SV_02' },
+                      { label: 'Deposit Limit', value: 'Uncapped', icon: Unlock, id: 'SV_03' },
+                      { label: 'Time-Lock', value: '0 Blocks', icon: History, id: 'SV_04' }
                     ]} />}
-                    {activeTab === 'SDK Interface' && <SystemModuleView title="SDK INTERFACE" subtitle="Developer Bridge" icon={Terminal} status="CONNECTED" items={[
-                      { label: 'API Version', value: '@yo/core-0.0.3', icon: Cpu, id: 'SDK_01' },
-                      { label: 'Connection', value: 'WebSocket+WAGMI', icon: Zap, id: 'SDK_02' },
-                      { label: 'Auth Token', value: 'Federated', icon: Key, id: 'SDK_03' },
-                      { label: 'Environment', value: 'Base-Mainnet', icon: Network, id: 'SDK_04' }
+                    {activeTab === 'Node Sync' && <SystemModuleView title="NODE SYNC" subtitle="Blockchain Connectivity" icon={Network} status="SYNCING" items={[
+                      { label: 'Base Node Latency', value: '12ms', icon: Zap, id: 'NS_01' },
+                      { label: 'Block Height', value: `${blockNumber || 'Checking'}`, icon: Layers, id: 'NS_02' },
+                      { label: 'Peers Active', value: '1,024', icon: Globe, id: 'NS_03' },
+                      { label: 'Rpc Reliability', value: '99.98%', icon: Activity, id: 'NS_04' }
                     ]} />}
 
-                    {/* Compliance Sub-System Views */}
+                    {/* SECURITY Sub-System Views */}
                     {activeTab === 'Safety Audits' && <SystemModuleView title="SAFETY AUDITS" subtitle="Security Posture" icon={ShieldCheck} status="VERIFIED" items={[
                       { label: 'Audit Score', value: '9.8/10.0', icon: BarChart4, id: 'AUD_01' },
                       { label: 'Last Scan', value: '4m Ago', icon: History, id: 'AUD_02' },
                       { label: 'Known Issues', value: '0 High / 0 Med', icon: AlertCircle, id: 'AUD_03' },
                       { label: 'Encrypted Vault', value: 'AES-256', icon: Lock, id: 'AUD_04' }
                     ]} />}
-                    {activeTab === 'Protocol SLA' && <SystemModuleView title="PROTOCOL SLA" subtitle="Uptime Service Node" icon={Activity} status="ACTIVE" items={[
+                    {activeTab === 'Privacy Shield' && <SystemModuleView title="PRIVACY SHIELD" subtitle="Identity Protection Node" icon={Lock} status="ENCRYPTED" items={[
+                      { label: 'ZKP Bridge', value: 'ACTIVE', icon: Zap, id: 'PRV_01' },
+                      { label: 'Identity Obfuscation', value: '99.9%', icon: Shield, id: 'PRV_02' },
+                      { label: 'Session Keys', value: 'Ephemeral', icon: Key, id: 'PRV_03' },
+                      { label: 'Data Sovereignty', value: 'USER-OWNED', icon: Database, id: 'PRV_04' }
+                    ]} />}
+                    {activeTab === 'Compliance' && <SystemModuleView title="COMPLIANCE" subtitle="Regulatory Framework" icon={FileText} status="APPROVED" items={[
+                      { label: 'Jurisdiction', value: 'Web3-Global', icon: Globe, id: 'CMP_01' },
+                      { label: 'KYC Status', value: 'Not Required', icon: User, id: 'CMP_02' },
+                      { label: 'AML Scoring', value: 'Chainalysis', icon: Shield, id: 'CMP_03' },
+                      { label: 'Terms Version', value: '2026.F-01', icon: History, id: 'CMP_04' }
+                    ]} />}
+                    {activeTab === 'Network SLA' && <SystemModuleView title="NETWORK SLA" subtitle="Uptime Service Node" icon={Activity} status="ACTIVE" items={[
                       { label: 'Guaranteed Uptime', value: '99.99%', icon: TrendingUp, id: 'SLA_01' },
                       { label: 'Support Response', value: '< 2 Hours', icon: Mail, id: 'SLA_02' },
                       { label: 'Node Redundancy', value: '5 Global', icon: Network, id: 'SLA_03' },
-                      { label: 'Service Level', value: 'Gold Tier', icon: ShieldCheck, id: 'SLA_04' }
+                      { label: 'Service Level', value: 'Platinum', icon: ShieldCheck, id: 'SLA_04' }
                     ]} />}
-                    {activeTab === 'Network Terms' && <SystemModuleView title="NETWORK TERMS" subtitle="Operating Parameters" icon={Database} status="v4.2" items={[
-                      { label: 'Compliance Region', value: 'Global-EVM', icon: Globe, id: 'TRM_01' },
-                      { label: 'Max Leverage', value: 'No-Margin', icon: PieChart, id: 'TRM_02' },
-                      { label: 'Governance Role', value: 'Active-Node', icon: User, id: 'TRM_03' },
-                      { label: 'Terms Version', value: '2026-F.01', icon: History, id: 'TRM_04' }
+
+                    {/* SYSTEM_OPS Sub-System Views */}
+                    {activeTab === 'Telemetry' && <SystemModuleView title="TELEMETRY" subtitle="Hedge Protection Node" icon={ShieldAlert} status="NOMINAL" items={[
+                      { label: 'Liq Probability', value: '0.00%', icon: Shield, id: 'TEL_01' },
+                      { label: 'Vault Health', value: '98/100', icon: Activity, id: 'TEL_02' },
+                      { label: 'Price Feeds', value: '8 Redundant', icon: Globe, id: 'TEL_03' },
+                      { label: 'Safety Lock', value: 'ARMED', icon: Lock, id: 'TEL_04' }
                     ]} />}
-                    {activeTab === 'Privacy Node' && <SystemModuleView title="PRIVACY NODE" subtitle="Identity Shield" icon={Lock} status="ENCRYPTED" items={[
-                      { label: 'ZKP Bridge', value: 'ACTIVE', icon: Zap, id: 'PRV_01' },
-                      { label: 'Identity Obfuscation', value: '99.9%', icon: Shield, id: 'PRV_02' },
-                      { label: 'Session Keys', value: 'Ephermeral', icon: Key, id: 'PRV_03' },
-                      { label: 'Data Sovereignty', value: 'USER-OWNED', icon: Database, id: 'PRV_04' }
+                    {activeTab === 'Chain Bridge' && <SystemModuleView title="CHAIN BRIDGE" subtitle="Cross-chain Router" icon={Repeat} status="ROUTING" items={[
+                      { label: 'Supported Chains', value: 'Base, ETH, ARB', icon: Network, id: 'CBR_01' },
+                      { label: 'Bridge Liquidity', value: '$84.2M', icon: Database, id: 'CBR_02' },
+                      { label: 'Cross Latency', value: '~45s Avg', icon: History, id: 'CBR_03' },
+                      { label: 'Bridge Fee', value: '0.00%', icon: PieChart, id: 'CBR_04' }
+                    ]} />}
+                    {activeTab === 'API Access' && <SystemModuleView title="API ACCESS" subtitle="Developer Bridge" icon={Terminal} status="CONNECTED" items={[
+                      { label: 'API Version', value: '@yo/core-0.0.3', icon: Cpu, id: 'API_01' },
+                      { label: 'Connection', value: 'WebSocket+WAGMI', icon: Zap, id: 'API_02' },
+                      { label: 'Auth Token', value: 'Federated', icon: Key, id: 'API_03' },
+                      { label: 'Environment', value: 'Base-Mainnet', icon: Network, id: 'API_04' }
+                    ]} />}
+                    {activeTab === 'Status Dashboard' && <SystemModuleView title="STATUS DASHBOARD" subtitle="Live System Health" icon={Activity} status="ALL_CLEAR" items={[
+                      { label: 'Terminal State', value: 'OPERATIONAL', icon: CheckCircle2, id: 'STS_01' },
+                      { label: 'Yield Engine', value: '100% Online', icon: TrendingUp, id: 'STS_02' },
+                      { label: 'Gas Oracles', value: 'Synced', icon: Zap, id: 'STS_03' },
+                      { label: 'Blockchain', value: 'Congestion: Low', icon: Activity, id: 'STS_04' }
                     ]} />}
                   </>
                 ) : (
