@@ -1,3 +1,8 @@
+<div align="center">
+  <img src="public/logo.png" alt="YO-Safe Logo" width="120" />
+  <br/>
+</div>
+
 # YO-Safe — Institutional-Grade DeFi Savings Terminal
 
 > **Built for the YO Protocol Hackathon** · Base Mainnet · React + Wagmi + YO SDK
