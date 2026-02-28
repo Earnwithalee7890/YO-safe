@@ -1614,7 +1614,7 @@ const App = () => {
           </header>
 
           {/* Main Command Hub */}
-          <main className="flex-1 w-full max-w-[1400px] mx-auto px-6 py-12 mb-20">
+          <main className="flex-1 w-full max-w-[1400px] mx-auto px-6 pt-12 pb-32">
             <AnimatePresence mode="wait">
               <motion.div
                 key={profileOpen ? 'Profile-Active' : activeTab}
