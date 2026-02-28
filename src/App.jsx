@@ -1614,7 +1614,7 @@ const App = () => {
           </header>
 
           {/* Main Command Hub */}
-          <main className="flex-1 w-full max-w-[1400px] mx-auto px-6 pt-12 pb-32">
+          <main className="pb-20 flex-1 w-full max-w-[1400px] mx-auto px-6 pt-12">
             <AnimatePresence mode="wait">
               <motion.div
                 key={profileOpen ? 'Profile-Active' : activeTab}
@@ -1694,7 +1694,7 @@ const App = () => {
           </main >
 
           {/* Cinematic Premium Institutional Footer */}
-          <footer className="mt-80 pt-60 pb-20 relative overflow-hidden footer-gradient border-t border-white/10">
+          <footer className="pt-20 pb-20 relative overflow-hidden footer-gradient border-t border-white/10">
             {/* Background Narrative Layer */}
             <div className="absolute top-20 left-0 w-full overflow-hidden pointer-events-none">
               <div className="footer-marquee">
