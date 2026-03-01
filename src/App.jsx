@@ -12,9 +12,10 @@ import {
   ChevronDown, Key, Sun, Moon, FileText, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAccount, useConnect, useDisconnect, useBalance, useWriteContract, useWaitForTransactionReceipt, useReadContract, useBlockNumber, useGasPrice, useWatchContractEvent, useWalletClient } from 'wagmi';
+import { useAccount, useConnect, useDisconnect, useBalance, useWriteContract, useWaitForTransactionReceipt, useReadContract, useBlockNumber, useGasPrice, useWatchContractEvent, useWalletClient, useSwitchChain } from 'wagmi';
 import { useUserBalance, useVaults, useDeposit, useRedeem, useApprove, useUserPerformance, useYoClient } from '@yo-protocol/react';
-import { parseUnits, formatUnits } from 'viem';
+import { parseUnits, formatUnits, createWalletClient, custom } from 'viem';
+import { base } from 'wagmi/chains';
 import { YO_SAFE_MANAGER_ADDRESS, SUPPORTED_TOKENS } from './constants';
 import { YO_SAFE_MANAGER_ABI } from './abi';
 import { getWalletClient } from '@wagmi/core';
@@ -129,6 +130,7 @@ const GlassCard = ({ children, className = "", delay = 0 }) => {
 const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
   const { address, chain } = useAccount();
   const { data: walletClient, error: wcError } = useWalletClient({ chainId: chain?.id });
+  const { switchChainAsync } = useSwitchChain();
   const yoClient = useYoClient();
   const [selectedToken, setSelectedToken] = useState(SUPPORTED_TOKENS[0]);
   const [amount, setAmount] = useState('');
@@ -141,16 +143,30 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
     setIsProcessing(true);
 
     let activeClient = walletClient;
-    if (!activeClient) {
+
+    if (chain?.id !== base.id) {
       try {
-        activeClient = await getWalletClient(config, { chainId: chain?.id });
-      } catch (err) {
-        console.error("Async wallet client fetch failed:", err);
+        if (switchChainAsync) {
+          await switchChainAsync({ chainId: base.id });
+          activeClient = await getWalletClient(config, { chainId: base.id });
+        }
+      } catch (error) {
+        console.error("Failed to switch network:", error);
+        alert("Please switch your wallet network to Base to continue.");
+        setIsProcessing(false);
+        return;
       }
     }
-
-    if (activeClient && chain && !activeClient.chain) {
-      activeClient.chain = chain;
+    if (!activeClient || !activeClient.chain) {
+      try {
+        activeClient = createWalletClient({
+          account: address,
+          chain: base,
+          transport: activeClient?.transport ? custom(activeClient.transport) : custom(window.ethereum)
+        });
+      } catch (err) {
+        console.error("Wallet client creation failed:", err);
+      }
     }
 
     if (yoClient && activeClient) {
@@ -286,6 +302,7 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 const WithdrawModal = ({ isOpen, onClose, vaultAddress, userShares }) => {
   const { address, chain } = useAccount();
   const { data: walletClient, error: wcError } = useWalletClient({ chainId: chain?.id });
+  const { switchChainAsync } = useSwitchChain();
   const yoClient = useYoClient();
   const [step, setStep] = useState('input');
   const [txHash, setTxHash] = useState(null);
@@ -298,16 +315,30 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress, userShares }) => {
     setIsProcessing(true);
 
     let activeClient = walletClient;
-    if (!activeClient) {
+
+    if (chain?.id !== base.id) {
       try {
-        activeClient = await getWalletClient(config, { chainId: chain?.id });
-      } catch (err) {
-        console.error("Async wallet client fetch failed:", err);
+        if (switchChainAsync) {
+          await switchChainAsync({ chainId: base.id });
+          activeClient = await getWalletClient(config, { chainId: base.id });
+        }
+      } catch (error) {
+        console.error("Failed to switch network:", error);
+        alert("Please switch your wallet network to Base to continue.");
+        setIsProcessing(false);
+        return;
       }
     }
-
-    if (activeClient && chain && !activeClient.chain) {
-      activeClient.chain = chain;
+    if (!activeClient || !activeClient.chain) {
+      try {
+        activeClient = createWalletClient({
+          account: address,
+          chain: base,
+          transport: activeClient?.transport ? custom(activeClient.transport) : custom(window.ethereum)
+        });
+      } catch (err) {
+        console.error("Wallet client creation failed:", err);
+      }
     }
 
     if (yoClient && activeClient) {
@@ -493,39 +524,39 @@ const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
   return (
     <div className="space-y-12">
       {/* Hero Banner */}
-      <header className="relative p-10 rounded-[24px] border border-white/[0.06] overflow-hidden" style={{ background: 'linear-gradient(135deg, #0E1400 0%, #080808 50%, #0A0009 100%)' }}>
+      <header className="relative p-6 md:p-10 rounded-[24px] border border-white/[0.06] overflow-hidden" style={{ background: 'linear-gradient(135deg, #0E1400 0%, #080808 50%, #0A0009 100%)' }}>
         <div className="absolute inset-0 bg-gradient-to-r from-primary/4 via-transparent to-secondary/3" />
         {/* Glow accents */}
         <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-primary/5 blur-[80px] pointer-events-none" />
         <div className="absolute -bottom-20 left-20 w-60 h-60 rounded-full bg-secondary/5 blur-[80px] pointer-events-none" />
 
-        <div className="relative z-10 grid grid-cols-12 items-start gap-8">
-          <div className="col-span-12 lg:col-span-7 space-y-5">
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-start gap-8">
+          <div className="col-span-1 lg:col-span-7 space-y-5">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
               <div className="px-2 py-0.5 bg-primary/10 rounded text-[9px] font-black text-primary tracking-widest border border-primary/20 font-mono">MANIFEST_V4</div>
-              <p className="label-s">Architectural Mission Statement</p>
+              <p className="label-s hidden sm:block">Architectural Mission Statement</p>
             </div>
             <h2 className="text-3xl lg:text-[2.4rem] font-black font-outfit tracking-tight uppercase italic leading-[1.05] text-white">
-              Solving Yield <span className="text-primary">Fragmentation</span> Through High‑Frequency Agentic Optimization.
+              Solving Yield <br className="hidden sm:block" /><span className="text-primary">Fragmentation</span> Through High‑Frequency Optimization.
             </h2>
             <p className="text-text-dim text-sm font-medium leading-relaxed max-w-lg opacity-70">
               YO-Safe automates capital deployment across the YO-Protocol ecosystem — providing institutional-grade DeFi automation for professional wealth optimization.
             </p>
-            <div className="flex items-center gap-4 pt-2">
-              <button onClick={onOpenDeposit} className="btn-main">Start Allocating <ArrowRight size={16} /></button>
-              <button className="btn-secondary">View Protocol Docs</button>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-2">
+              <button onClick={onOpenDeposit} className="btn-main w-full sm:w-auto justify-center">Start Allocating <ArrowRight size={16} /></button>
+              <button className="btn-secondary w-full sm:w-auto justify-center">View Protocol Docs</button>
             </div>
           </div>
 
-          <div className="col-span-12 lg:col-span-5 grid grid-cols-2 gap-4">
+          <div className="col-span-1 lg:col-span-5 grid grid-cols-2 gap-4 mt-6 lg:mt-0">
             {[
               { label: 'Protocol Safety', value: '99.82', unit: '/100', color: '#C8FF00' },
               { label: 'Node Latency', value: '14ms', unit: '', color: '#00D1FF' },
               { label: 'Uptime SLA', value: '99.9', unit: '%', color: '#00C27F' },
               { label: 'Encryption', value: 'AES', unit: '-GCM', color: '#8B5CF6' },
             ].map((stat) => (
-              <div key={stat.label} className="p-4 rounded-2xl border border-white/5 bg-white/[0.02] space-y-1">
+              <div key={stat.label} className="p-4 rounded-2xl border border-white/5 bg-white/[0.02] space-y-1 text-center sm:text-left">
                 <p className="text-[9px] font-mono font-bold text-white/30 uppercase tracking-widest">{stat.label}</p>
                 <p className="text-2xl font-black font-outfit tracking-tight" style={{ color: stat.color }}>
                   {stat.value}<span className="text-sm opacity-50">{stat.unit}</span>
@@ -538,17 +569,17 @@ const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
 
       <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-white/5 to-transparent" />
 
-      <header className="flex justify-between items-end">
-        <div className="space-y-4">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+        <div className="space-y-2 md:space-y-4">
           <div className="flex items-center gap-4">
             <div className="glow-point" />
-            <span className="label-s !opacity-60 !tracking-[0.6em]">System Operations Base-Mainnet</span>
+            <span className="label-s !opacity-60 !tracking-[0.6em]">Base-Mainnet Ops</span>
           </div>
-          <h2 className="text-6xl font-black font-outfit text-white tracking-tighter uppercase italic">
+          <h2 className="text-4xl md:text-6xl font-black font-outfit text-white tracking-tighter uppercase italic">
             SYSTEM <span className="title-ghost">STATUS</span>
           </h2>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
           <div className="hidden md:flex flex-col items-end justify-center px-6 border-r border-white/5 h-12">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-black text-primary italic">SECURE_NODE</span>
@@ -563,53 +594,53 @@ const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
           {isConnected && (
             <button
               onClick={copyAddress}
-              className="btn-secondary flex items-center gap-3 border-emerald-500/20 text-emerald-400"
+              className="btn-secondary flex-1 md:flex-none justify-center items-center gap-3 border-emerald-500/20 text-emerald-400"
             >
               {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
               <span className="font-mono">{address?.slice(0, 6)}...{address?.slice(-4)}</span>
             </button>
           )}
-          <button onClick={onOpenDeposit} className="btn-main">Allocate Capital <Plus size={18} /></button>
+          <button onClick={onOpenDeposit} className="btn-main flex-1 md:flex-none justify-center">Allocate Capital <Plus size={18} /></button>
         </div>
       </header>
 
       <div className="grid grid-cols-12 gap-10">
         <div className="col-span-12 lg:col-span-8 space-y-10">
-          <GlassCard className="min-h-[500px] flex flex-col justify-between !border-primary/10 overflow-hidden relative group" delay={0.1}>
-            <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 rounded-full blur-[100px] pointer-events-none group-hover:bg-primary/10 transition-all duration-700" />
-            <div className="flex justify-between items-start relative z-10">
-              <div>
-                <p className="label-s mb-8 flex items-center gap-4">
-                  Integrated Asset Valuation (Real-time)
+          <GlassCard className="min-h-[400px] md:min-h-[500px] flex flex-col justify-between !border-primary/10 overflow-hidden relative group p-6 md:p-10" delay={0.1}>
+            <div className="absolute top-0 right-0 w-64 md:w-96 h-64 md:h-96 bg-primary/5 rounded-full blur-[80px] md:blur-[100px] pointer-events-none group-hover:bg-primary/10 transition-all duration-700" />
+            <div className="flex flex-col md:flex-row justify-between items-start gap-8 relative z-10">
+              <div className="w-full">
+                <p className="label-s mb-6 flex items-center gap-4">
+                  Asset Valuation (Live)
                 </p>
                 {isConnected && contractLoading ? (
                   <div className="space-y-4">
-                    <div className="h-24 w-64 bg-white/5 rounded-3xl animate-pulse" />
+                    <div className="h-20 md:h-24 w-48 md:w-64 bg-white/5 rounded-3xl animate-pulse" />
                     <div className="h-4 w-32 bg-white/5 rounded-full animate-pulse" />
                   </div>
                 ) : (
                   <>
-                    <h3 className="text-7xl font-black font-outfit tracking-[-0.06em] leading-none text-white">
-                      {isConnected ? totalBalance : '0.00'}<span className="text-xl italic opacity-20 ml-3">{SUPPORTED_TOKENS[0].symbol}</span>
+                    <h3 className="text-5xl md:text-7xl font-black font-outfit tracking-[-0.06em] leading-none text-white break-all">
+                      {isConnected ? totalBalance : '0.00'}<span className="text-lg md:text-xl italic opacity-20 ml-2 md:ml-3">{SUPPORTED_TOKENS[0].symbol}</span>
                     </h3>
-                    <div className="flex items-center gap-8 mt-14">
-                      <span className="px-5 py-2.5 bg-emerald-500/5 border border-emerald-500/10 rounded-full text-emerald-400 text-xs font-black tracking-widest italic flex items-center gap-2">
-                        <TrendingUp size={14} /> +{stats.performance}% Performance
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 mt-8 md:mt-14">
+                      <span className="px-4 py-2 bg-emerald-500/5 border border-emerald-500/10 rounded-full text-emerald-400 text-[10px] md:text-xs font-black tracking-widest italic flex items-center gap-2">
+                        <TrendingUp size={14} /> +{stats.performance}% Perf
                       </span>
-                      <span className="flex items-center gap-2 label-s !opacity-60">
-                        <Shield size={14} className="text-primary" /> Integrated YO-Protocol SDK
+                      <span className="flex items-center gap-2 label-s !opacity-60 text-left">
+                        <Shield size={14} className="text-primary flex-shrink-0" /> YO-Protocol integration
                       </span>
                     </div>
                   </>
                 )}
               </div>
-              <div className="text-right">
-                <p className="label-s mb-4">Current Mainnet APR</p>
-                <div className="flex flex-col items-end">
-                  <span className="text-6xl font-black font-outfit text-primary tracking-[-0.05em] leading-none italic">
-                    {stats.avgAPR}<span className="text-2xl not-italic opacity-40">%</span>
+              <div className="text-left md:text-right border-t md:border-t-0 border-white/5 pt-6 md:pt-0 w-full md:w-auto">
+                <p className="label-s mb-2 md:mb-4">Network APR</p>
+                <div className="flex flex-col items-start md:items-end">
+                  <span className="text-4xl md:text-6xl font-black font-outfit text-primary tracking-[-0.05em] leading-none italic">
+                    {stats.avgAPR}<span className="text-xl md:text-2xl not-italic opacity-40">%</span>
                   </span>
-                  <span className="label-s mt-4 !opacity-40 tracking-[0.2em]">Optimized via YO Protocol</span>
+                  <span className="label-s mt-2 md:mt-4 !opacity-40 tracking-[0.2em]">Optimized Strategy</span>
                 </div>
               </div>
             </div>
@@ -628,7 +659,7 @@ const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
           </GlassCard>
 
           {/* Quick Action Cards — Dark Institutional Premium */}
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8">
             <motion.div
               whileHover={{ y: -6 }}
               onClick={onOpenDeposit}
@@ -791,15 +822,15 @@ const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
       <div style={{ marginBottom: '60px' }} className="mt-16 space-y-10">
         <div className="text-center space-y-3">
           <p className="text-[11px] font-mono font-black text-primary tracking-[0.5em] uppercase">Growth_Telemetry</p>
-          <h2 className="text-3xl font-black font-outfit text-white tracking-tight uppercase">Platform Performance Across DeFi</h2>
+          <h2 className="text-2xl md:text-3xl font-black font-outfit text-white tracking-tight uppercase">Platform Performance Across DeFi</h2>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {[
-            { label: 'Total Value Locked', value: '$15.6M', desc: 'Across all vault strategies', color: 'text-emerald-400' },
-            { label: 'Avg APR', value: '14.2%', desc: 'YO Protocol optimized', color: 'text-primary' },
-            { label: 'Contracts Deployed', value: '1,000+', desc: 'Smart contracts on Base', color: 'text-vibrant-orange' },
-            { label: 'Supported Protocols', value: '20+', desc: 'Across DeFi ecosystem', color: 'text-accent-blue' }
+            { label: 'Total Value Locked', value: `$${Number(stats.totalTVL).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, desc: 'Across active vault strategies', color: 'text-emerald-400' },
+            { label: 'Avg APR', value: `${stats.avgAPR}%`, desc: 'YO Protocol optimized', color: 'text-primary' },
+            { label: 'Active Vaults', value: String(stats.vaultCount || 0), desc: 'Smart contracts on Base', color: 'text-vibrant-orange' },
+            { label: 'Supported Protocols', value: '1', desc: 'YO Native Ecosystem', color: 'text-accent-blue' }
           ].map((stat, i) => (
             <div key={i} className="card-stat-modern">
               <p className="stat-label">{stat.label}</p>
@@ -1134,12 +1165,48 @@ const LeaderboardView = ({ vaultAddress }) => {
 // --- View: Quests (Task Hub) ---
 
 const QuestsView = ({ onOpenDeposit }) => {
+  const { address } = useAccount();
+  const { vaults } = useVaults();
+  const mainVaultAddress = vaults?.[0]?.address || YO_SAFE_MANAGER_ADDRESS;
+  const { position } = useUserBalance(mainVaultAddress, address);
+
+  const [hasFollowed, setHasFollowed] = useState(false);
+  const [hasEmail, setHasEmail] = useState(false);
+  const [hasX, setHasX] = useState(false);
+
+  useEffect(() => {
+    const checkState = () => {
+      setHasFollowed(localStorage.getItem('yo_followed_x') === 'true');
+      setHasEmail(!!localStorage.getItem('yo_email'));
+      setHasX(!!localStorage.getItem('yo_x'));
+    };
+    checkState();
+    const interval = setInterval(checkState, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleFollow = () => {
+    window.open('https://x.com/Earnwithalee7890', '_blank');
+    localStorage.setItem('yo_followed_x', 'true');
+    setHasFollowed(true);
+  };
+
+  const navigateToProfile = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    alert('Click your Connected Profile Wallet pill in the top right header to federate your Identity!');
+  };
+
+  const depositedAmount = (position?.assets && position.assets > 0n) ? parseFloat(formatUnits(position.assets, 6)) : 0;
+
   const tasks = [
-    { title: 'Allocate to Matrix Yield Agent', desc: 'Deploy at least 100 USDC into the Matrix Yield Agent vault node.', points: '500 PTS', status: 'pending' },
-    { title: 'Institutional Identity Sync', desc: 'Complete your identity federation by linking your X and Email accounts.', points: '200 PTS', status: 'pending' },
-    { title: 'Weekly Harvest Maintenance', desc: 'Perform at least 5 capital reallocations across different network nodes.', points: '1200 PTS', status: 'pending' },
-    { title: 'Mainnet Bridge Verification', desc: 'Bridge assets from Ethereum L1 to Base Mainnet using the YO-Portal.', points: '800 PTS', status: 'pending' },
+    { title: 'Follow Operations', desc: 'Follow the official @Earnwithalee7890 account on X.', points: '100', status: hasFollowed ? 'completed' : 'pending', action: handleFollow, icon: Twitter },
+    { title: 'Link X Identity', desc: 'Federate your X handle inside the User Profile menu.', points: '200', status: hasX ? 'completed' : 'pending', action: navigateToProfile, icon: Twitter },
+    { title: 'Link Email Layer', desc: 'Federate your email address inside the User Profile menu.', points: '200', status: hasEmail ? 'completed' : 'pending', action: navigateToProfile, icon: Mail },
+    { title: 'Deploy Capital', desc: 'Make your first deposit into a YO-Safe institutional vault.', points: '500', status: depositedAmount > 0 ? 'completed' : 'pending', action: onOpenDeposit, icon: Database },
+    { title: 'Whale Allocator', desc: 'Deploy at least 1,000 USDC into the system.', points: '2000', status: depositedAmount >= 1000 ? 'completed' : 'pending', action: onOpenDeposit, icon: Layers2 },
   ];
+
+  const totalPoints = tasks.reduce((acc, t) => acc + (t.status === 'completed' ? parseInt(t.points) : 0), 0);
 
   return (
     <div className="space-y-16">
@@ -1150,63 +1217,66 @@ const QuestsView = ({ onOpenDeposit }) => {
         </div>
         <div className="flex flex-col items-end">
           <p className="label-s mb-2 text-primary">Your Quest Status</p>
-          <p className="text-4xl font-black font-outfit italic text-white leading-none">2,450 <span className="text-xs not-italic opacity-40 ml-2">PTS</span></p>
+          <p className="text-4xl font-black font-outfit italic text-white leading-none">{totalPoints.toLocaleString()} <span className="text-xs not-italic opacity-40 ml-2">PTS</span></p>
         </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         <div className="space-y-6">
-          <h4 className="text-[11px] font-mono font-black text-white/40 tracking-[0.5em] uppercase border-b border-white/5 pb-4">Daily Operations</h4>
-          {tasks.slice(0, 2).map((task, i) => (
+          <h4 className="text-[11px] font-mono font-black text-white/40 tracking-[0.5em] uppercase border-b border-white/5 pb-4">Social & Identity Operations</h4>
+          {tasks.slice(0, 3).map((task, i) => (
             <motion.div
               key={task.title}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
               className="task-item"
-              onClick={task.status === 'pending' ? onOpenDeposit : undefined}
+              onClick={task.status === 'pending' ? task.action : undefined}
             >
-              <div className="flex gap-6 items-start">
+              <div className="flex gap-6 items-start pointer-events-none">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${task.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-primary/10 text-primary'}`}>
-                  {task.status === 'completed' ? <CheckCircle2 size={24} /> : <Zap size={24} />}
+                  {task.status === 'completed' ? <CheckCircle2 size={24} /> : <task.icon size={24} />}
                 </div>
                 <div className="space-y-1">
                   <h5 className="text-xl font-black font-outfit text-white uppercase italic">{task.title}</h5>
                   <p className="text-xs font-medium text-slate-500 max-w-sm">{task.desc}</p>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-3">
+              <div className="flex flex-col items-end gap-3 pointer-events-none">
                 <span className={`task-badge ${task.status === 'completed' ? 'badge-completed' : 'badge-pending'}`}>
                   {task.status}
                 </span>
-                <span className="text-[10px] font-black text-primary italic font-outfit">{task.points}</span>
+                <span className="text-[10px] font-black text-primary italic font-outfit">{task.points} PTS</span>
               </div>
             </motion.div>
           ))}
         </div>
 
         <div className="space-y-6">
-          <h4 className="text-[11px] font-mono font-black text-white/40 tracking-[0.5em] uppercase border-b border-white/5 pb-4">Institutional Milestones</h4>
-          {tasks.slice(2).map((task, i) => (
+          <h4 className="text-[11px] font-mono font-black text-white/40 tracking-[0.5em] uppercase border-b border-white/5 pb-4">Capital Allocation Milestones</h4>
+          {tasks.slice(3).map((task, i) => (
             <motion.div
               key={task.title}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: (i + 2) * 0.1 }}
+              transition={{ delay: (i + 3) * 0.1 }}
               className="task-item"
+              onClick={task.status === 'pending' ? task.action : undefined}
             >
-              <div className="flex gap-6 items-start">
-                <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500 shrink-0">
-                  <Layers2 size={24} />
+              <div className="flex gap-6 items-start pointer-events-none">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${task.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 border border-white/10 text-slate-500'}`}>
+                  {task.status === 'completed' ? <CheckCircle2 size={24} /> : <task.icon size={24} />}
                 </div>
                 <div className="space-y-1">
                   <h5 className="text-xl font-black font-outfit text-white uppercase italic">{task.title}</h5>
                   <p className="text-xs font-medium text-slate-500 max-w-sm">{task.desc}</p>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-3">
-                <span className="task-badge badge-pending">PENDING</span>
-                <span className="text-[10px] font-black text-primary italic font-outfit">{task.points}</span>
+              <div className="flex flex-col items-end gap-3 pointer-events-none">
+                <span className={`task-badge ${task.status === 'completed' ? 'badge-completed' : 'badge-pending'}`}>
+                  {task.status}
+                </span>
+                <span className="text-[10px] font-black text-primary italic font-outfit">{task.points} PTS</span>
               </div>
             </motion.div>
           ))}
@@ -1542,7 +1612,7 @@ const App = () => {
                   <h1 className="text-xl font-black font-outfit tracking-[-0.06em] uppercase leading-none">YO<span className="text-primary italic">-SAFE</span></h1>
                 </div>
 
-                <nav className="hidden lg:flex items-center gap-2 bg-white/[0.03] p-1.5 rounded-[20px] border border-white/5 backdrop-blur-md">
+                <nav className="hidden lg:flex items-center gap-1 xl:gap-2 bg-white/[0.03] p-1.5 rounded-[20px] border border-white/5 backdrop-blur-md">
                   <NavLink label="Terminal" active={activeTab === 'Terminal' && !profileOpen} onClick={() => navigateTo('Terminal')} icon={Terminal} />
                   <NavLink label="Registry" active={activeTab === 'Registry' && !profileOpen} onClick={() => navigateTo('Registry')} icon={Database} />
                   <NavLink label="Leaderboard" active={activeTab === 'Leaderboard' && !profileOpen} onClick={() => navigateTo('Leaderboard')} icon={BarChart4} />
@@ -1551,14 +1621,14 @@ const App = () => {
                 </nav>
 
                 <button
-                  className="lg:hidden w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-white"
+                  className="lg:hidden w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/5 flex items-center justify-center text-white ml-2"
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
                 >
                   {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
                 </button>
               </div>
 
-              <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                 <div className="hidden xl:flex items-center gap-3 px-4 py-2 bg-white/[0.03] border border-white/5 rounded-xl focus-within:border-primary/20 transition-all">
                   <Search size={14} className="text-slate-700 shrink-0" />
                   <input type="text" placeholder="Search..." className="bg-transparent text-[11px] font-mono font-bold focus:outline-none w-36 text-white placeholder:opacity-20 placeholder:italic" />
@@ -1566,30 +1636,30 @@ const App = () => {
 
                 <button
                   onClick={() => setIsLightTheme(!isLightTheme)}
-                  className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-500 hover:text-primary transition-all active:scale-95"
+                  className="hidden sm:flex w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/5 border border-white/10 items-center justify-center text-slate-500 hover:text-primary transition-all active:scale-95"
                   title={isLightTheme ? "Dark Mode" : "Light Mode"}
                 >
-                  {isLightTheme ? <Moon size={18} /> : <Sun size={18} />}
+                  {isLightTheme ? <Moon size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Sun size={16} className="sm:w-[18px] sm:h-[18px]" />}
                 </button>
 
                 {isConnected ? (
                   <div className="relative">
                     <button
                       onClick={toggleProfile}
-                      className={`flex items-center gap-4 px-5 py-2.5 rounded-2xl border transition-all duration-500 overflow-hidden group ${profileOpen ? 'bg-primary border-primary' : 'bg-white/[0.03] border-white/10 hover:border-primary/40'}`}
+                      className={`flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl border transition-all duration-500 overflow-hidden group ${profileOpen ? 'bg-primary border-primary' : 'bg-white/[0.03] border-white/10 hover:border-primary/40'}`}
                     >
-                      <div className={`p-1.5 rounded-lg transition-colors ${profileOpen ? 'bg-black/20 text-black' : 'bg-primary/10 text-primary'}`}>
+                      <div className={`hidden sm:block p-1.5 rounded-lg transition-colors ${profileOpen ? 'bg-black/20 text-black' : 'bg-primary/10 text-primary'}`}>
                         <User size={18} />
                       </div>
-                      <div className="text-left">
-                        <p className={`text-[10px] font-mono font-bold tracking-widest uppercase transition-colors ${profileOpen ? 'text-black/60' : 'text-slate-500'}`}>
+                      <div className="text-left flex flex-col items-start">
+                        <p className={`hidden sm:block text-[10px] font-mono font-bold tracking-widest uppercase transition-colors ${profileOpen ? 'text-black/60' : 'text-slate-500'}`}>
                           {balanceData ? `${balanceData.formatted?.slice(0, 5) || '0.000'} ${balanceData.symbol || ''}` : 'CONNECTED'}
                         </p>
-                        <p className={`text-xs font-black font-outfit transition-colors ${profileOpen ? 'text-black' : 'text-white'}`}>
-                          {address?.slice(0, 6)}...{address?.slice(-4)}
+                        <p className={`text-[10px] sm:text-xs font-black font-outfit transition-colors ${profileOpen ? 'text-black' : 'text-white'}`}>
+                          {address?.slice(0, 4)}...{address?.slice(-4)}
                         </p>
                       </div>
-                      <ChevronDown size={16} className={`transition-transform duration-500 ${profileOpen ? 'rotate-180 text-black' : 'text-slate-500 group-hover:text-primary'}`} />
+                      <ChevronDown size={14} className={`hidden sm:block transition-transform duration-500 ${profileOpen ? 'rotate-180 text-black' : 'text-slate-500 group-hover:text-primary'}`} />
                     </button>
 
                     <AnimatePresence>
@@ -1802,14 +1872,14 @@ const App = () => {
                       <img src="/logo.png" alt="YO" className="w-10 h-10 object-contain brightness-125" />
                     </div>
                     <div>
-                      <h5 className="text-5xl font-black font-outfit tracking-[-0.1em] italic uppercase text-white leading-none">
+                      <h5 className="text-3xl font-black font-outfit tracking-[-0.1em] italic uppercase text-white leading-none">
                         YO<span className="text-primary">-SAFE</span>
                       </h5>
                       <p className="text-[10px] font-mono font-bold text-primary tracking-[0.5em] mt-2 opacity-60">OPERATIONAL NODE v4.2</p>
                     </div>
                   </div>
 
-                  <p className="text-3xl font-medium text-white/40 leading-[1.1] tracking-tight max-w-sm">
+                  <p className="text-lg font-medium text-white/40 leading-[1.1] tracking-tight max-w-sm">
                     The institutional interface for <span className="text-white">high-frequency</span> yield optimization.
                   </p>
 
@@ -1826,6 +1896,31 @@ const App = () => {
                         <span className="text-[8px] font-mono font-bold text-white/20 group-hover:text-white/60 tracking-widest transition-colors">{label}</span>
                       </a>
                     ))}
+                  </div>
+
+                  {/* Integrated Baseline Metrics */}
+                  <div className="pt-10 mt-10 border-t border-white/5 space-y-8">
+                    <div className="flex flex-wrap items-center gap-8">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-mono font-bold text-white/20 uppercase tracking-widest">Digital Rights</span>
+                        <span className="text-[10px] font-black italic text-white/60">© 2026 YO-SAFE OPERATIONS</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-mono font-bold text-white/20 uppercase tracking-widest">Protocol Version</span>
+                        <span className="text-[10px] font-black italic text-primary">v4.2.1-SECURE</span>
+                      </div>
+                    </div>
+
+                    <div className="inline-flex flex-wrap px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[9px] font-mono font-bold text-white/60 uppercase">Node_Synced</span>
+                      </div>
+                      <div className="w-[1px] h-3 bg-white/10" />
+                      <span className="text-[9px] font-mono font-bold text-primary">Block: #{blockNumber?.toString().slice(-8) || 'SYNCING'}</span>
+                      <div className="w-[1px] h-3 bg-white/10" />
+                      <span className="text-[9px] font-mono font-bold text-white/40 italic">Gas: {gasPrice ? `${(Number(gasPrice) / 1e9).toFixed(2)}` : '0.00'} Gwei</span>
+                    </div>
                   </div>
                 </div>
 
@@ -1850,13 +1945,13 @@ const App = () => {
                     }
                   ].map((col) => (
                     <div key={col.label} className="space-y-10">
-                      <h6 className="text-[11px] font-mono font-black text-primary tracking-[0.4em] uppercase">{col.label}</h6>
+                      <h6 className="text-[9px] font-mono font-black text-primary tracking-[0.4em] uppercase">{col.label}</h6>
                       <ul className="space-y-5">
                         {col.links.map((link) => (
                           <li
                             key={link}
                             onClick={() => navigateTo(link)}
-                            className="text-lg font-bold text-white/40 hover:text-white cursor-pointer transition-all duration-300 hover:translate-x-1 flex items-center gap-2 group"
+                            className="text-sm font-bold text-white/40 hover:text-white cursor-pointer transition-all duration-300 hover:translate-x-1 flex items-center gap-2 group"
                           >
                             <div className="w-1 h-1 rounded-full bg-primary/0 group-hover:bg-primary transition-all scale-0 group-hover:scale-100" />
                             {link}
@@ -1865,34 +1960,6 @@ const App = () => {
                       </ul>
                     </div>
                   ))}
-                </div>
-              </div>
-
-              {/* Baseline Metrics Bar */}
-              <div className="pt-20 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-12">
-                <div className="flex items-center gap-12">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-mono font-bold text-white/20 uppercase tracking-widest">Digital Rights</span>
-                    <span className="text-xs font-black italic text-white/60">© 2026 YO-SAFE OPERATIONS</span>
-                  </div>
-                  <div className="h-8 w-[1px] bg-white/5 hidden md:block" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-mono font-bold text-white/20 uppercase tracking-widest">Protocol Version</span>
-                    <span className="text-xs font-black italic text-primary">v4.2.1-SECURE</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6">
-                  <div className="px-6 py-3 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-[10px] font-mono font-bold text-white/60 uppercase">Node_Synced</span>
-                    </div>
-                    <div className="w-[1px] h-4 bg-white/10" />
-                    <span className="text-[10px] font-mono font-bold text-primary">Block: #{blockNumber?.toString().slice(-8) || 'SYNCING'}</span>
-                    <div className="w-[1px] h-4 bg-white/10" />
-                    <span className="text-[10px] font-mono font-bold text-white/40 italic">Gas: {gasPrice ? `${(Number(gasPrice) / 1e9).toFixed(2)}` : '0.00'} Gwei</span>
-                  </div>
                 </div>
               </div>
             </div>
