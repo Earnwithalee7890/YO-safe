@@ -12,11 +12,13 @@ import {
   ChevronDown, Key, Sun, Moon, FileText, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAccount, useConnect, useDisconnect, useBalance, useWriteContract, useWaitForTransactionReceipt, useReadContract, useBlockNumber, useGasPrice, useWatchContractEvent } from 'wagmi';
-import { useUserBalance, useVaults, useDeposit, useRedeem, useApprove, useUserPerformance } from '@yo-protocol/react';
+import { useAccount, useConnect, useDisconnect, useBalance, useWriteContract, useWaitForTransactionReceipt, useReadContract, useBlockNumber, useGasPrice, useWatchContractEvent, useWalletClient } from 'wagmi';
+import { useUserBalance, useVaults, useDeposit, useRedeem, useApprove, useUserPerformance, useYoClient } from '@yo-protocol/react';
 import { parseUnits, formatUnits } from 'viem';
 import { YO_SAFE_MANAGER_ADDRESS, SUPPORTED_TOKENS } from './constants';
 import { YO_SAFE_MANAGER_ABI } from './abi';
+import { getWalletClient } from '@wagmi/core';
+import { config } from './providers/Web3Provider';
 
 // --- Entrance Logic ---
 
@@ -125,48 +127,62 @@ const GlassCard = ({ children, className = "", delay = 0 }) => {
 // DepositModal — uses YO SDK's native useDeposit + useApprove hooks
 // This deposits directly into live YO Protocol vaults on Base Mainnet
 const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
+  const { data: walletClient, error: wcError } = useWalletClient({ chainId: chain?.id });
+  const yoClient = useYoClient();
   const [selectedToken, setSelectedToken] = useState(SUPPORTED_TOKENS[0]);
   const [amount, setAmount] = useState('');
   const [step, setStep] = useState('input'); // 'input' | 'approving' | 'depositing' | 'done'
   const [txHash, setTxHash] = useState(null);
-
-  // YO SDK — approve the vault to spend the token
-  const { approve, isLoading: isApproving } = useApprove({
-    token: selectedToken.address,
-    onConfirmed: () => setStep('depositing'),
-    onError: (e) => { console.error('Approval failed:', e); setStep('input'); },
-  });
-
-  // YO SDK — deposit into live YO vault
-  const { deposit, isLoading: isDepositing } = useDeposit({
-    vault: vaultAddress || '0x',
-    onSubmitted: (hash) => setTxHash(hash),
-    onConfirmed: () => setStep('done'),
-    onError: (e) => { console.error('Deposit failed:', e); setStep('input'); },
-  });
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleStart = async () => {
     if (!amount || !address || !vaultAddress) return;
-    const parsedAmount = parseUnits(amount, selectedToken.decimals);
-    setStep('approving');
+    setIsProcessing(true);
+
+    let activeClient = walletClient;
+    if (!activeClient) {
+      try {
+        activeClient = await getWalletClient(config, { chainId: chain?.id });
+      } catch (err) {
+        console.error("Async wallet client fetch failed:", err);
+      }
+    }
+
+    if (activeClient && chain && !activeClient.chain) {
+      activeClient.chain = chain;
+    }
+
+    if (yoClient && activeClient) {
+      yoClient.walletClient = activeClient;
+    } else if (!activeClient) {
+      alert("SDK Error: Wagmi has not provided a walletClient yet.");
+      setIsProcessing(false);
+      return;
+    }
+
     try {
-      await approve(parsedAmount);
+      const parsedAmount = parseUnits(amount, selectedToken.decimals);
+      setStep('depositing');
+
+      const res = await yoClient.depositWithApproval({
+        token: selectedToken.address,
+        vault: vaultAddress,
+        amount: parsedAmount
+      });
+
+      setTxHash(res.depositHash || res.hash);
+      setStep('done');
     } catch (e) {
+      console.error("Local Handle Start Error:", e);
+      alert("Error parsing amount or initiating approval: " + (e?.shortMessage || e?.message || e));
       setStep('input');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  // Auto-trigger deposit after approval confirms
-  useEffect(() => {
-    if (step === 'depositing' && amount) {
-      const parsedAmount = parseUnits(amount, selectedToken.decimals);
-      deposit(parsedAmount).catch(() => setStep('input'));
-    }
-  }, [step]);
-
   const handleClose = () => { setStep('input'); setAmount(''); setTxHash(null); onClose(); };
-  const isProcessing = isApproving || isDepositing;
 
   return (
     <AnimatePresence>
@@ -237,12 +253,9 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 
                 {/* Step indicator */}
                 <div className="flex items-center gap-2 py-3 px-4 rounded-xl bg-white/[0.02] border border-white/5">
-                  {step === 'approving' ? (
-                    <><div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                      <span className="text-[10px] font-mono text-yellow-400">Step 1/2 — Approving token spend...</span></>
-                  ) : step === 'depositing' ? (
+                  {isProcessing ? (
                     <><div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                      <span className="text-[10px] font-mono text-primary">Step 2/2 — Depositing into YO vault...</span></>
+                      <span className="text-[10px] font-mono text-primary">Processing transaction (Please sign in wallet)...</span></>
                   ) : (
                     <><div className="w-1.5 h-1.5 rounded-full bg-white/20" />
                       <span className="text-[10px] font-mono text-white/30">Ready to deploy capital into live YO Protocol vault</span></>
@@ -251,7 +264,7 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 
                 <button onClick={handleStart} disabled={isProcessing || !amount || !address || !vaultAddress}
                   className="w-full btn-main !py-5 font-black disabled:opacity-40">
-                  {step === 'approving' ? 'Approving...' : step === 'depositing' ? 'Depositing into Vault...' : `Deploy ${selectedToken.symbol} to YO Vault`}
+                  {isProcessing ? 'Deploying...' : `Deploy ${selectedToken.symbol} to YO Vault`}
                   {!isProcessing && <ArrowRight size={16} />}
                 </button>
 
@@ -271,23 +284,53 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 // WithdrawModal — uses YO SDK's native useRedeem hook
 // Redeems shares directly from the live YO Protocol vault
 const WithdrawModal = ({ isOpen, onClose, vaultAddress, userShares }) => {
-  const { address } = useAccount();
+  const { address, chain } = useAccount();
+  const { data: walletClient, error: wcError } = useWalletClient({ chainId: chain?.id });
+  const yoClient = useYoClient();
   const [step, setStep] = useState('input');
   const [txHash, setTxHash] = useState(null);
-
-  // YO SDK — redeem shares from live YO vault
-  const { redeem, isLoading, isSuccess, instant, assetsOrRequestId } = useRedeem({
-    vault: vaultAddress || '0x',
-    onSubmitted: (hash) => { setTxHash(hash); setStep('redeeming'); },
-    onConfirmed: () => setStep('done'),
-    onError: (e) => { console.error('Redeem failed:', e); setStep('input'); },
-  });
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [instant, setInstant] = useState(false);
 
   const sharesDisplay = userShares ? formatUnits(userShares, 18) : '0';
   const handleRedeem = async () => {
     if (!userShares || !address || !vaultAddress) return;
+    setIsProcessing(true);
+
+    let activeClient = walletClient;
+    if (!activeClient) {
+      try {
+        activeClient = await getWalletClient(config, { chainId: chain?.id });
+      } catch (err) {
+        console.error("Async wallet client fetch failed:", err);
+      }
+    }
+
+    if (activeClient && chain && !activeClient.chain) {
+      activeClient.chain = chain;
+    }
+
+    if (yoClient && activeClient) {
+      yoClient.walletClient = activeClient;
+    } else if (!activeClient) {
+      alert("SDK Error: Wagmi has not provided a walletClient yet.");
+      setIsProcessing(false);
+      return;
+    }
+
     setStep('redeeming');
-    try { await redeem(userShares); } catch (e) { setStep('input'); }
+    try {
+      const res = await yoClient.redeem({ vault: vaultAddress, shares: userShares });
+      setTxHash(res.hash);
+      setInstant(true);
+      setStep('done');
+    } catch (e) {
+      console.error("Local Handle Redeem Error:", e);
+      alert("Error initiating redeem: " + (e?.shortMessage || e?.message || e));
+      setStep('input');
+    } finally {
+      setIsProcessing(false);
+    }
   };
   const handleClose = () => { setStep('input'); setTxHash(null); onClose(); };
 
@@ -352,9 +395,9 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress, userShares }) => {
                 </div>
 
                 <button onClick={handleRedeem}
-                  disabled={isLoading || !address || !vaultAddress || !userShares}
+                  disabled={isProcessing || !address || !vaultAddress || !userShares}
                   className="w-full py-5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-black font-outfit uppercase tracking-wider hover:bg-red-500/20 transition-all disabled:opacity-40">
-                  {isLoading ? 'Redeeming...' : 'Redeem Full Position'}
+                  {isProcessing ? 'Redeeming...' : 'Redeem Full Position'}
                 </button>
 
                 {!userShares && (
@@ -745,7 +788,7 @@ const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
       </div>
 
       {/* Growth & Success Section */}
-      <div className="mt-16 space-y-10">
+      <div style={{ marginBottom: '60px' }} className="mt-16 space-y-10">
         <div className="text-center space-y-3">
           <p className="text-[11px] font-mono font-black text-primary tracking-[0.5em] uppercase">Growth_Telemetry</p>
           <h2 className="text-3xl font-black font-outfit text-white tracking-tight uppercase">Platform Performance Across DeFi</h2>
@@ -1016,14 +1059,18 @@ const MarketMapView = ({ stats }) => {
 
 // --- View: Leaderboard (Institutional Ranking) ---
 
-const LeaderboardView = () => {
-  const leaders = [
-    { rank: 1, address: '0x38D...84f9', tvl: '$4.2M', volume: '$12M', points: '14,200', active: true },
-    { rank: 2, address: '0x1F2...9a2e', tvl: '$2.1M', volume: '$8.4M', points: '8,900', active: true },
-    { rank: 3, address: '0x9a4...2e38', tvl: '$1.8M', volume: '$5.2M', points: '7,400', active: true },
-    { rank: 4, address: '0x5b2...1c9a', tvl: '$980K', volume: '$2.1M', points: '4,200', active: false },
-    { rank: 5, address: '0x7d3...4f2e', tvl: '$640K', volume: '$1.5M', points: '3,100', active: false },
-  ];
+const LeaderboardView = ({ vaultAddress }) => {
+  const { address, isConnected } = useAccount();
+  const { position } = useUserBalance(vaultAddress || '0x', address);
+
+  const totalBalance = (vaultAddress && position?.assets && position.assets > 0n)
+    ? formatUnits(position.assets, 6)
+    : '0';
+
+  const hasDeps = isConnected && parseFloat(totalBalance) > 0;
+  const leaders = hasDeps ? [
+    { rank: 1, address: address.substring(0, 6) + '...' + address.substring(address.length - 4), tvl: `$${totalBalance}`, volume: 'N/A', points: '14,200', active: true }
+  ] : [];
 
   return (
     <div className="space-y-16">
@@ -1035,7 +1082,7 @@ const LeaderboardView = () => {
       </header>
 
       <div className="grid grid-cols-1 gap-6">
-        {leaders.map((user, i) => (
+        {leaders.length > 0 ? leaders.map((user, i) => (
           <motion.div
             key={user.address}
             initial={{ opacity: 0, x: -20 }}
@@ -1073,7 +1120,12 @@ const LeaderboardView = () => {
               <button className="btn-secondary !py-3 !px-8 text-[11px]">View Node</button>
             </div>
           </motion.div>
-        ))}
+        )) : (
+          <div className="p-16 text-center text-white/30 border border-white/5 bg-white/[0.02] rounded-3xl">
+            <p className="font-mono text-sm uppercase tracking-widest">No active depositors found</p>
+            <p className="text-xs font-medium mt-2">Connect wallet and allocate capital to appear on the leaderboard</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1084,7 +1136,7 @@ const LeaderboardView = () => {
 const QuestsView = ({ onOpenDeposit }) => {
   const tasks = [
     { title: 'Allocate to Matrix Yield Agent', desc: 'Deploy at least 100 USDC into the Matrix Yield Agent vault node.', points: '500 PTS', status: 'pending' },
-    { title: 'Institutional Identity Sync', desc: 'Complete your identity federation by linking your X and Email accounts.', points: '200 PTS', status: 'completed' },
+    { title: 'Institutional Identity Sync', desc: 'Complete your identity federation by linking your X and Email accounts.', points: '200 PTS', status: 'pending' },
     { title: 'Weekly Harvest Maintenance', desc: 'Perform at least 5 capital reallocations across different network nodes.', points: '1200 PTS', status: 'pending' },
     { title: 'Mainnet Bridge Verification', desc: 'Bridge assets from Ethereum L1 to Base Mainnet using the YO-Portal.', points: '800 PTS', status: 'pending' },
   ];
@@ -1398,6 +1450,7 @@ const ProfileView = () => {
 const App = () => {
   const { data: blockNumber } = useBlockNumber({ watch: false }); // disabled polling for performance
   const { data: gasPrice } = useGasPrice();
+  const { chain } = useAccount();
 
   const [activeTab, setActiveTab] = useState('Terminal');
   const [loading, setLoading] = useState(true);
@@ -1406,6 +1459,18 @@ const App = () => {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLightTheme, setIsLightTheme] = useState(false); // Always default to dark theme
+
+  const { data: globalWalletClient } = useWalletClient({ chainId: chain?.id });
+  const yoClient = useYoClient();
+
+  useEffect(() => {
+    if (yoClient && globalWalletClient) {
+      if (chain && !globalWalletClient.chain) {
+        globalWalletClient.chain = chain;
+      }
+      yoClient.walletClient = globalWalletClient;
+    }
+  }, [yoClient, globalWalletClient, chain]);
 
   useEffect(() => {
     // Clear any stale light theme on load
@@ -1424,7 +1489,7 @@ const App = () => {
 
   // Protocol Stats Engine
   const { vaults } = useVaults();
-  const mainVaultAddress = vaults?.[0]?.address || null; // Live YO vault for SDK deposit/redeem
+  const mainVaultAddress = vaults?.[0]?.address || YO_SAFE_MANAGER_ADDRESS; // Always fallback to smart contract to prevent blocking
   const protocolStats = useMemo(() => {
     const totalTVL = vaults?.reduce((acc, v) => acc + (parseFloat(v.tvl) || 0), 0) || 0;
     const avgAPR = vaults?.length ? (vaults.reduce((acc, v) => acc + (parseFloat(v.apr) || 0), 0) / vaults.length) : 14.2;
@@ -1614,7 +1679,7 @@ const App = () => {
           </header>
 
           {/* Main Command Hub */}
-          <main className="pb-20 flex-1 w-full max-w-[1400px] mx-auto px-6 pt-12">
+          <main className="flex-1 w-full max-w-[1400px] mx-auto px-6 py-12">
             <AnimatePresence mode="wait">
               <motion.div
                 key={profileOpen ? 'Profile-Active' : activeTab}
@@ -1628,7 +1693,7 @@ const App = () => {
                   <>
                     {activeTab === 'Terminal' && <TerminalView onOpenDeposit={() => setDepositOpen(true)} onOpenWithdraw={() => setWithdrawOpen(true)} stats={protocolStats} />}
                     {activeTab === 'Registry' && <RegistryView onOpenDeposit={() => setDepositOpen(true)} />}
-                    {activeTab === 'Leaderboard' && <LeaderboardView />}
+                    {activeTab === 'Leaderboard' && <LeaderboardView vaultAddress={mainVaultAddress} />}
                     {activeTab === 'Quests' && <QuestsView onOpenDeposit={() => setDepositOpen(true)} />}
                     {activeTab === 'Flow' && <FlowView onOpenDeposit={() => setDepositOpen(true)} />}
                     {activeTab === 'Strategy Flows' && <FlowView onOpenDeposit={() => setDepositOpen(true)} />}
@@ -1721,15 +1786,14 @@ const App = () => {
           </main >
 
           {/* Cinematic Premium Institutional Footer */}
-          <footer className="pt-20 pb-20 relative overflow-hidden footer-gradient border-t border-white/10">
+          <footer style={{ marginTop: '60px' }} className="pt-20 pb-20 relative overflow-hidden footer-gradient border-t border-[#00ff96]/15">
             {/* Background Narrative Layer */}
             <div className="absolute top-20 left-0 w-full overflow-hidden pointer-events-none">
               <div className="footer-marquee">
                 YO-PROTOCOL SYSTEM_INIT TERMINAL_ACTIVE_NODE SAVINGS_OPTIMIZATION_ENGINE LUXURY_DEFI_SAVINGS
               </div>
             </div>
-
-            <div className="max-w-[1720px] mx-auto px-10 relative z-10">
+            <div className="max-w-[1720px] mx-auto px-10 relative z-10 pt-20">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-20 mb-40">
                 {/* Brand & Manifesto Section */}
                 <div className="lg:col-span-4 space-y-16">
@@ -1751,16 +1815,16 @@ const App = () => {
 
                   <div className="flex items-center gap-10 pt-4">
                     {[
-                      { icon: Twitter, label: 'NETWORK_X' },
-                      { icon: Github, label: 'SOURCE_HUB' },
-                      { icon: Globe, label: 'MAIN_PORTAL' }
-                    ].map(({ icon: Icon, label }) => (
-                      <div key={label} className="group cursor-pointer flex items-center gap-3">
+                      { icon: Twitter, label: 'NETWORK_X', href: 'https://x.com/Earnwithalee7890' },
+                      { icon: Github, label: 'SOURCE_HUB', href: 'https://github.com/Earnwithalee7890/YO-safe' },
+                      { icon: Globe, label: 'MAIN_PORTAL', href: 'https://yoprotocol.com' }
+                    ].map(({ icon: Icon, label, href }) => (
+                      <a key={label} href={href} target="_blank" rel="noopener noreferrer" className="group cursor-pointer flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/30 group-hover:text-primary group-hover:border-primary/30 transition-all duration-500">
                           <Icon size={18} />
                         </div>
                         <span className="text-[8px] font-mono font-bold text-white/20 group-hover:text-white/60 tracking-widest transition-colors">{label}</span>
-                      </div>
+                      </a>
                     ))}
                   </div>
                 </div>
@@ -1833,8 +1897,6 @@ const App = () => {
               </div>
             </div>
           </footer>
-          <DepositModal isOpen={depositOpen} onClose={() => setDepositOpen(false)} />
-          <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
         </div>
       )}
     </AnimatePresence>
