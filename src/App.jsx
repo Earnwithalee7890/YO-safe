@@ -179,19 +179,80 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 
     try {
       const parsedAmount = parseUnits(amount, selectedToken.decimals);
-      setStep('depositing');
 
-      const res = await yoClient.depositWithApproval({
+      // ── Step 1: Approval (with generous polling timeout for slow wallets) ──
+      setStep('approving');
+      let approveHash;
+      try {
+        const res = await yoClient.depositWithApproval({
+          token: selectedToken.address,
+          vault: vaultAddress,
+          amount: parsedAmount
+        });
+        // Success path — SDK handled approve + deposit atomically
+        setTxHash(res.depositHash || res.hash);
+        setStep('done');
+        return;
+      } catch (sdkErr) {
+        const msg = sdkErr?.message || '';
+        const isTimeout = msg.toLowerCase().includes('timed out') || msg.toLowerCase().includes('timeout');
+        if (!isTimeout) {
+          // Real error — surface to user
+          throw sdkErr;
+        }
+        // The approval tx was broadcast but the SDK timed out waiting for it.
+        // Fall through to the manual polling path below.
+        console.warn("SDK timed out waiting for approval receipt. Switching to manual polling...", sdkErr);
+      }
+
+      // ── Manual fallback: poll for approve receipt up to 3 minutes ──
+      // We need the approve tx hash — re-read allowance to check if it went through
+      setStep('depositing');
+      const MAX_POLLS = 36; // 36 × 5s = 3 minutes
+      let confirmed = false;
+      for (let i = 0; i < MAX_POLLS; i++) {
+        await new Promise(r => setTimeout(r, 5000)); // wait 5s between polls
+        try {
+          // Check if allowance was actually set (approval confirmed on-chain)
+          const publicClient = yoClient.publicClient;
+          const allowance = await publicClient.readContract({
+            address: selectedToken.address,
+            abi: [{
+              type: 'function', name: 'allowance', stateMutability: 'view',
+              inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
+              outputs: [{ type: 'uint256' }]
+            }],
+            functionName: 'allowance',
+            args: [address, '0xF1EeE0957267b1A474323Ff9CfF7719E964969FA'] // YO_GATEWAY_ADDRESS
+          });
+          if (allowance >= parsedAmount) {
+            confirmed = true;
+            break;
+          }
+        } catch (pollErr) {
+          console.warn(`Polling attempt ${i + 1} failed:`, pollErr);
+        }
+      }
+
+      if (!confirmed) {
+        throw new Error(
+          "Your USDC approval is taking longer than expected to confirm on-chain. " +
+          "Please wait a few minutes and try depositing again — the approval may have gone through."
+        );
+      }
+
+      // ── Step 2: Deposit (approval is confirmed, now do the deposit) ──
+      const depositRes = await yoClient.deposit({
         token: selectedToken.address,
         vault: vaultAddress,
         amount: parsedAmount
       });
 
-      setTxHash(res.depositHash || res.hash);
+      setTxHash(depositRes?.hash || depositRes?.depositHash);
       setStep('done');
     } catch (e) {
       console.error("Local Handle Start Error:", e);
-      alert("Error parsing amount or initiating approval: " + (e?.shortMessage || e?.message || e));
+      alert("Error during deposit: " + (e?.shortMessage || e?.message || e));
       setStep('input');
     } finally {
       setIsProcessing(false);
@@ -269,9 +330,12 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 
                 {/* Step indicator */}
                 <div className="flex items-center gap-2 py-3 px-4 rounded-xl bg-white/[0.02] border border-white/5">
-                  {isProcessing ? (
+                  {step === 'approving' ? (
+                    <><div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                      <span className="text-[10px] font-mono text-yellow-400">Step 1/2 — Please approve USDC in your wallet...</span></>
+                  ) : step === 'depositing' ? (
                     <><div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                      <span className="text-[10px] font-mono text-primary">Processing transaction (Please sign in wallet)...</span></>
+                      <span className="text-[10px] font-mono text-primary">Step 2/2 — Confirming approval &amp; sending deposit...</span></>
                   ) : (
                     <><div className="w-1.5 h-1.5 rounded-full bg-white/20" />
                       <span className="text-[10px] font-mono text-white/30">Ready to deploy capital into live YO Protocol vault</span></>
@@ -280,7 +344,7 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 
                 <button onClick={handleStart} disabled={isProcessing || !amount || !address || !vaultAddress}
                   className="w-full btn-main !py-5 font-black disabled:opacity-40">
-                  {isProcessing ? 'Deploying...' : `Deploy ${selectedToken.symbol} to YO Vault`}
+                  {step === 'approving' ? 'Approving USDC...' : step === 'depositing' ? 'Confirming deposit...' : `Deploy ${selectedToken.symbol} to YO Vault`}
                   {!isProcessing && <ArrowRight size={16} />}
                 </button>
 
