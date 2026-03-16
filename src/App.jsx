@@ -485,12 +485,12 @@ const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
   useWatchContractEvent({
     address: YO_SAFE_MANAGER_ADDRESS,
     abi: YO_SAFE_MANAGER_ABI,
-    eventName: 'Deposited',
+    eventName: 'DepositedToVault',
     onLogs(newLogs) {
       const formattedLogs = newLogs.map(l => ({
         id: l.transactionHash,
-        t: "CAPITAL_ALLOCATED",
-        m: `${l.args.token.slice(0, 6)}...`,
+        t: "CAPITAL_ROUTED_TO_YO_VAULT",
+        m: `vault:${l.args.vault?.slice(0, 6)}...`,
         s: "DEPOSITED"
       }));
       setLogs(prev => [...formattedLogs, ...prev].slice(0, 5));
@@ -500,12 +500,12 @@ const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
   useWatchContractEvent({
     address: YO_SAFE_MANAGER_ADDRESS,
     abi: YO_SAFE_MANAGER_ABI,
-    eventName: 'Withdrawn',
+    eventName: 'RedeemedFromVault',
     onLogs(newLogs) {
       const formattedLogs = newLogs.map(l => ({
         id: l.transactionHash,
-        t: "CAPITAL_WITHDRAWN",
-        m: `${l.args.token.slice(0, 6)}...`,
+        t: "VAULT_SHARES_REDEEMED",
+        m: `vault:${l.args.vault?.slice(0, 6)}...`,
         s: "WITHDRAWN"
       }));
       setLogs(prev => [...formattedLogs, ...prev].slice(0, 5));

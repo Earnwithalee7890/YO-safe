@@ -31,12 +31,12 @@ YO-Safe automates capital deployment into **risk-adjusted, optimized YO Protocol
 
 | Requirement | Implementation |
 |---|---|
-| ✅ **`@yo-protocol/react` integration** | `useVaults`, `useDeposit`, `useApprove`, `useRedeem`, `useUserBalance`, `useUserPerformance` |
-| ✅ **Real deposit flow** | `useApprove` → `useDeposit` — full ERC-20 approval + vault deposit in 2 steps |
-| ✅ **Real redeem flow** | `useRedeem(shares)` — redeems vault shares, handles instant + async settlement |
-| ✅ **Live YO vault interaction** | Vault address dynamically loaded from `useVaults()`, not hardcoded |
-| ✅ **Working onchain transactions** | Every deposit/withdraw links to a **live Basescan tx** |
-| ✅ **Not a mockup** | All balance, APR, TVL, and yield data sourced from live Base Mainnet |
+| ✅ **`@yo-protocol/react` integration** | `useVaults`, `useDeposit`, `useApprove`, `useRedeem`, `useUserBalance`, `useUserPerformance`, `useYoClient` |
+| ✅ **Real deposit flow** | Frontend: `yoClient.depositWithApproval()` → YO vault directly via SDK. Contract: `depositToVault()` → `IERC4626.deposit()` on-chain |
+| ✅ **Real redeem flow** | Frontend: `yoClient.redeem()` → YO vault directly via SDK. Contract: `redeemFromVault()` → `IERC4626.redeem()` on-chain |
+| ✅ **Live YO vault interaction** | Both layers (SDK + contract) interact with **live YO Protocol ERC-4626 vaults** on Base Mainnet |
+| ✅ **Working onchain transactions** | Every deposit/withdraw links to a **live Basescan tx** with real tx hash |
+| ✅ **Not a mockup** | All balance, APR, TVL, and yield data sourced from live Base Mainnet via YO SDK |
 
 ---
 
@@ -50,6 +50,35 @@ Network:    Base Mainnet (primary), Ethereum, Arbitrum
 Wallet:     MetaMask, Coinbase Wallet, WalletConnect
 Contract:   YoSafeManager.sol (OpenZeppelin, Solidity ^0.8.20)
 ```
+
+### 🏗 Architecture (Two-Layer YO Integration)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         USER                                │
+└──────────────┬──────────────────────┬───────────────────────┘
+               │ Layer 1 (Frontend)   │ Layer 2 (On-Chain)
+               ▼                      ▼
+┌──────────────────────┐   ┌─────────────────────────────┐
+│  YO SDK (React)      │   │  YoSafeManager.sol          │
+│  yoClient            │   │  depositToVault()            │
+│  .depositWithApproval│   │    → IERC4626.deposit()      │
+│  .redeem()           │   │  redeemFromVault()           │
+│  useUserBalance()    │   │    → IERC4626.redeem()       │
+│  useUserPerformance()│   │  getPosition()               │
+└──────────┬───────────┘   └──────────┬──────────────────┘
+           │                          │
+           └──────────┐  ┌────────────┘
+                      ▼  ▼
+         ┌──────────────────────────┐
+         │  YO Protocol ERC-4626    │
+         │  Vault (Base Mainnet)    │
+         │  yoUSD / yoETH / yoBTC  │
+         │  Live Yield Strategies   │
+         └──────────────────────────┘
+```
+
+**Both layers route funds into the same live YO Protocol vaults** — the SDK for direct wallet-to-vault UX, and the smart contract for on-chain composability and portfolio tracking.
 
 ---
 
@@ -123,16 +152,30 @@ npm run preview
 ## 🔗 Smart Contract
 
 ### YoSafeManager.sol
-**Deployed on Base Mainnet:** [`0x8a5e35ed753122cE729c155f133755A9d3dE3DE6`](https://basescan.org/address/0x8a5e35ed753122cE729c155f133755A9d3dE3DE6)
+**Deployed on Base Mainnet:** [`0xEB8E250F6B679FFe6BC7f93768df5bAf474A5620`](https://basescan.org/address/0xEB8E250F6B679FFe6BC7f93768df5bAf474A5620)
+
+This contract is **not a simple ledger** — it routes funds directly into live YO Protocol ERC-4626 vaults on-chain:
 
 ```solidity
-// Core functions:
-function deposit(address token, uint256 amount) external nonReentrant
-function withdraw(address token, uint256 amount) external nonReentrant
-function getPortfolio(address user, address token) external view returns (uint256, uint256, uint256)
+// Deposit: User → YoSafeManager → YO ERC-4626 Vault
+function depositToVault(address vault, uint256 amount) external nonReentrant
+    // pulls user ERC-20 → approves vault → calls IERC4626.deposit() → credits shares to user
+
+// Redeem: YO ERC-4626 Vault → User Wallet
+function redeemFromVault(address vault, uint256 shares) external nonReentrant
+    // calls IERC4626.redeem(shares, receiver=user, owner=this) → assets sent directly to wallet
+
+// Live position query (incl. accrued yield via convertToAssets)
+function getPosition(address user, address vault)
+    external view returns (uint256 shares, uint256 currentAssets, uint256 depositedAt)
 ```
 
-Supports: **USDC** (`0x833589fC...`) and **WETH** (`0x42000000...`) on Base Mainnet.
+**Key design decisions:**
+- `depositToVault` calls `IERC4626.deposit()` — funds immediately enter live YO yield strategies
+- `redeemFromVault` calls `IERC4626.redeem()` — assets returned directly to user, never stuck in contract
+- `getPosition` uses `convertToAssets()` — the returned `currentAssets` value grows in real-time as yield accrues
+- Whitelisted vault registry ensures only approved YO Protocol vaults can be used
+- `SafeERC20` + `ReentrancyGuard` + checks-effects-interactions pattern throughout
 
 ---
 
