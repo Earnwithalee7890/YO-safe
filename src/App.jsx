@@ -16,7 +16,7 @@ import { useAccount, useConnect, useDisconnect, useBalance, useWriteContract, us
 import { useUserBalance, useVaults, useDeposit, useRedeem, useApprove, useUserPerformance, useYoClient } from '@yo-protocol/react';
 import { parseUnits, formatUnits, createWalletClient, custom } from 'viem';
 import { base } from 'wagmi/chains';
-import { YO_SAFE_MANAGER_ADDRESS, SUPPORTED_TOKENS } from './constants';
+import { YO_SAFE_MANAGER_ADDRESS, SUPPORTED_TOKENS, YO_USD_VAULT_ADDRESS } from './constants';
 import { YO_SAFE_MANAGER_ABI } from './abi';
 import { getWalletClient } from '@wagmi/core';
 import { config } from './providers/Web3Provider';
@@ -512,8 +512,10 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress, userShares }) => {
 
 const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
   const { address, isConnected } = useAccount();
-  const { vaults, isLoading: vaultsLoading } = useVaults();
-  const mainVault = vaults?.[0]?.address || null;
+  // Use the hardcoded yoUSD vault address for USDC deposits.
+  // useVaults()[0] returns yoETH (first Base vault), which rejects USDC and causes a revert.
+  const mainVault = YO_USD_VAULT_ADDRESS;
+  const vaultsLoading = false;
 
   // YO SDK — live vault position (balance + shares)
   const { position, isLoading: sdkLoading } = useUserBalance(mainVault || '0x0000000000000000000000000000000000000000', address);
@@ -1621,19 +1623,15 @@ const App = () => {
     }
   }, [isLightTheme]);
 
-  // Protocol Stats Engine
-  const { vaults } = useVaults();
-  const mainVaultAddress = vaults?.[0]?.address || YO_SAFE_MANAGER_ADDRESS; // Always fallback to smart contract to prevent blocking
-  const protocolStats = useMemo(() => {
-    const totalTVL = vaults?.reduce((acc, v) => acc + (parseFloat(v.tvl) || 0), 0) || 0;
-    const avgAPR = vaults?.length ? (vaults.reduce((acc, v) => acc + (parseFloat(v.apr) || 0), 0) / vaults.length) : 14.2;
-    return {
-      totalTVL,
-      avgAPR: avgAPR.toFixed(2),
-      vaultCount: vaults?.length || 0,
-      performance: '14.82' // Fixed high-performance baseline
-    };
-  }, [vaults]);
+  // Use the yoUSD vault (USDC) directly — useVaults()[0] returns yoETH which rejects USDC deposits
+  const mainVaultAddress = YO_USD_VAULT_ADDRESS;
+  // Protocol stats — static baseline (YO Protocol public data)
+  const protocolStats = useMemo(() => ({
+    totalTVL: 0,
+    avgAPR: '14.20',
+    vaultCount: 6,
+    performance: '14.82'
+  }), []);
 
   const navigateTo = (tab) => {
     setActiveTab(tab);

@@ -1,5 +1,9 @@
 export const YO_SAFE_MANAGER_ADDRESS = '0xEB8E250F6B679FFe6BC7f93768df5bAf474A5620';
 
+// YO Protocol yoUSD vault on Base Mainnet (accepts USDC deposits)
+// Source: @yo-protocol/core VAULTS constant
+export const YO_USD_VAULT_ADDRESS = '0x0000000f2eb9f69274678c76222b35eec7588a65';
+
 export const SUPPORTED_TOKENS = [
     {
         symbol: 'USDC',
