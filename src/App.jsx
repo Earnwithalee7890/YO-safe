@@ -363,8 +363,11 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 
 // WithdrawModal — uses YO SDK's native useRedeem hook
 // Redeems shares directly from the live YO Protocol vault
-const WithdrawModal = ({ isOpen, onClose, vaultAddress, userShares }) => {
+const WithdrawModal = ({ isOpen, onClose, vaultAddress }) => {
   const { address, chain } = useAccount();
+  const { position } = useUserBalance(vaultAddress || '0x0000000000000000000000000000000000000000', address);
+  const userShares = position?.shares;
+
   const { data: walletClient, error: wcError } = useWalletClient({ chainId: chain?.id });
   const { switchChainAsync } = useSwitchChain();
   const yoClient = useYoClient();
@@ -373,7 +376,7 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress, userShares }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [instant, setInstant] = useState(false);
 
-  const sharesDisplay = userShares ? formatUnits(userShares, 18) : '0';
+  const sharesDisplay = userShares ? formatUnits(userShares, SUPPORTED_TOKENS[0].decimals) : '0';
   const handleRedeem = async () => {
     if (!userShares || !address || !vaultAddress) return;
     setIsProcessing(true);
@@ -1661,7 +1664,7 @@ const App = () => {
           </div>
 
           <DepositModal isOpen={depositOpen} onClose={() => setDepositOpen(false)} vaultAddress={mainVaultAddress} />
-          <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} vaultAddress={mainVaultAddress} userShares={null} />
+          <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} vaultAddress={mainVaultAddress} />
 
           {/* Institutional Top Navigation */}
           <header className="header-glass">
