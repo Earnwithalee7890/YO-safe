@@ -416,8 +416,46 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress }) => {
       return;
     }
 
-    setStep('redeeming');
+    setStep('approving');
     try {
+      const publicClient = yoClient.publicClient;
+      const allowance = await publicClient.readContract({
+        address: vaultAddress,
+        abi: [{ type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ type: 'uint256' }] }],
+        functionName: 'allowance',
+        args: [address, '0xF1EeE0957267b1A474323Ff9CfF7719E964969FA'] // YO_GATEWAY_ADDRESS
+      });
+
+      if (allowance < userShares) {
+        const approveRes = await yoClient.approve({
+          token: vaultAddress,
+          spender: '0xF1EeE0957267b1A474323Ff9CfF7719E964969FA',
+          amount: userShares
+        });
+        
+        // Wait for confirmation
+        let confirmed = false;
+        for (let i = 0; i < 36; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const newAllowance = await publicClient.readContract({
+              address: vaultAddress,
+              abi: [{ type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ type: 'uint256' }] }],
+              functionName: 'allowance',
+              args: [address, '0xF1EeE0957267b1A474323Ff9CfF7719E964969FA']
+            });
+            if (newAllowance >= userShares) {
+              confirmed = true;
+              break;
+            }
+          } catch (pollErr) { }
+        }
+        if (!confirmed) {
+          throw new Error("Approval is taking longer than expected. Please wait and try again.");
+        }
+      }
+
+      setStep('redeeming');
       const res = await yoClient.redeem({ vault: vaultAddress, shares: userShares });
       setTxHash(res.hash);
       setInstant(true);
@@ -483,9 +521,12 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress }) => {
                 </div>
 
                 <div className="flex items-center gap-2 py-3 px-4 rounded-xl bg-red-500/5 border border-red-500/10">
-                  {step === 'redeeming' ? (
+                  {step === 'approving' ? (
+                    <><div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                      <span className="text-[10px] font-mono text-yellow-400">Step 1/2 — Please approve share redemption in your wallet...</span></>
+                  ) : step === 'redeeming' ? (
                     <><div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                      <span className="text-[10px] font-mono text-red-400">Processing redemption from YO vault...</span></>
+                      <span className="text-[10px] font-mono text-red-400">Step 2/2 — Processing redemption from YO vault...</span></>
                   ) : (
                     <><div className="w-1.5 h-1.5 rounded-full bg-white/20" />
                       <span className="text-[10px] font-mono text-white/30">This will redeem all your vault shares</span></>
@@ -495,7 +536,7 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress }) => {
                 <button onClick={handleRedeem}
                   disabled={isProcessing || !address || !vaultAddress || !userShares}
                   className="w-full py-5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 font-black font-outfit uppercase tracking-wider hover:bg-red-500/20 transition-all disabled:opacity-40">
-                  {isProcessing ? 'Redeeming...' : 'Redeem Full Position'}
+                  {step === 'approving' ? 'Approving...' : step === 'redeeming' ? 'Redeeming...' : 'Redeem Full Position'}
                 </button>
 
                 {!userShares && (
