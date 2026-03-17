@@ -427,11 +427,11 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress }) => {
       });
 
       if (allowance < userShares) {
-        const approveRes = await yoClient.approve({
-          token: vaultAddress,
-          spender: '0xF1EeE0957267b1A474323Ff9CfF7719E964969FA',
-          amount: userShares
-        });
+        const approveRes = await yoClient.approve(
+          vaultAddress,
+          userShares,
+          '0xF1EeE0957267b1A474323Ff9CfF7719E964969FA'
+        );
         
         // Wait for confirmation
         let confirmed = false;
