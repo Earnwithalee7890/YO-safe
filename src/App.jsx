@@ -363,10 +363,9 @@ const DepositModal = ({ isOpen, onClose, vaultAddress }) => {
 
 // WithdrawModal — uses YO SDK's native useRedeem hook
 // Redeems shares directly from the live YO Protocol vault
-const WithdrawModal = ({ isOpen, onClose, vaultAddress }) => {
+const WithdrawModal = ({ isOpen, onClose, vaultAddress, userPosition }) => {
   const { address, chain } = useAccount();
-  const { position } = useUserBalance(vaultAddress || '0x0000000000000000000000000000000000000000', address);
-  const userShares = position?.shares;
+  const userShares = userPosition?.shares;
 
   const { data: walletClient, error: wcError } = useWalletClient({ chainId: chain?.id });
   const { switchChainAsync } = useSwitchChain();
@@ -554,29 +553,19 @@ const WithdrawModal = ({ isOpen, onClose, vaultAddress }) => {
 
 // --- View: Terminal (Dashboard) ---
 
-const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats }) => {
+const TerminalView = ({ onOpenDeposit, onOpenWithdraw, stats, userPosition, userPerformance, sdkLoading }) => {
   const { address, isConnected } = useAccount();
   // Use the hardcoded yoUSD vault address for USDC deposits.
-  // useVaults()[0] returns yoETH (first Base vault), which rejects USDC and causes a revert.
   const mainVault = YO_USD_VAULT_ADDRESS;
   const vaultsLoading = false;
 
-  // YO SDK — live vault position (balance + shares)
-  const { position, isLoading: sdkLoading } = useUserBalance(mainVault || '0x0000000000000000000000000000000000000000', address);
-
-  // YO SDK — user's real yield performance data (only when vault and user are ready)
-  const { performance } = useUserPerformance({
-    vault: mainVault || '0x0000000000000000000000000000000000000000',
-    user: address,
-  });
-
   // Real SDK data takes priority — falls back to 0.00
-  const totalBalance = (mainVault && position?.assets)
-    ? formatUnits(position.assets, SUPPORTED_TOKENS[0].decimals)
+  const totalBalance = (mainVault && userPosition?.assets !== undefined)
+    ? formatUnits(userPosition.assets, SUPPORTED_TOKENS[0].decimals)
     : '0.00';
-  const userShares = (mainVault && position?.shares) ? position.shares : null; // bigint shares for redeem
-  const yieldEarned = (mainVault && performance?.yieldEarned)
-    ? formatUnits(performance.yieldEarned, SUPPORTED_TOKENS[0].decimals)
+  const userShares = (mainVault && userPosition?.shares) ? userPosition.shares : null; 
+  const yieldEarned = (mainVault && userPerformance?.yieldEarned !== undefined)
+    ? formatUnits(userPerformance.yieldEarned, SUPPORTED_TOKENS[0].decimals)
     : '0.00';
   const contractLoading = sdkLoading || vaultsLoading;
 
@@ -1669,6 +1658,15 @@ const App = () => {
 
   // Use the yoUSD vault (USDC) directly — useVaults()[0] returns yoETH which rejects USDC deposits
   const mainVaultAddress = YO_USD_VAULT_ADDRESS;
+
+  // --- GLOBAL DATA FETCHING (Ensures consistency across tabs and modals) ---
+  const { address, isConnected } = useAccount();
+  const { position: userPosition, isLoading: sdkLoading } = useUserBalance(mainVaultAddress || '0x0000000000000000000000000000000000000000', address);
+  const { performance: userPerformance } = useUserPerformance({
+    vault: mainVaultAddress || '0x0000000000000000000000000000000000000000',
+    user: address,
+  });
+
   // Protocol stats — static baseline (YO Protocol public data)
   const protocolStats = useMemo(() => ({
     totalTVL: 0,
@@ -1683,7 +1681,6 @@ const App = () => {
     setIsMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
   const { data: balanceData } = useBalance({ address });
@@ -1705,7 +1702,7 @@ const App = () => {
           </div>
 
           <DepositModal isOpen={depositOpen} onClose={() => setDepositOpen(false)} vaultAddress={mainVaultAddress} />
-          <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} vaultAddress={mainVaultAddress} />
+          <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} vaultAddress={mainVaultAddress} userPosition={userPosition} />
 
           {/* Institutional Top Navigation */}
           <header className="header-glass">
@@ -1867,7 +1864,16 @@ const App = () => {
               >
                 {!profileOpen ? (
                   <>
-                    {activeTab === 'Terminal' && <TerminalView onOpenDeposit={() => setDepositOpen(true)} onOpenWithdraw={() => setWithdrawOpen(true)} stats={protocolStats} />}
+                    {activeTab === 'Terminal' && (
+                       <TerminalView 
+                         onOpenDeposit={() => setDepositOpen(true)} 
+                         onOpenWithdraw={() => setWithdrawOpen(true)} 
+                         stats={protocolStats} 
+                         userPosition={userPosition}
+                         userPerformance={userPerformance}
+                         sdkLoading={sdkLoading}
+                       />
+                    )}
                     {activeTab === 'Registry' && <RegistryView onOpenDeposit={() => setDepositOpen(true)} />}
                     {activeTab === 'Leaderboard' && <LeaderboardView vaultAddress={mainVaultAddress} />}
                     {activeTab === 'Quests' && <QuestsView onOpenDeposit={() => setDepositOpen(true)} />}
